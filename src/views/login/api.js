@@ -10,6 +10,6 @@ import { request } from '@/utils'
 
 export default {
   toggleRole: data => request.post('/auth/role/toggle', data),
-  login: data => request.post('/auth/login', data, { needToken: false }),
+  login: data => request.post('/auth/login', data, { needToken: true, withCredentials: true }),
   getUser: () => request.get('/user/detail'),
 }
