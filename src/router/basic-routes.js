@@ -37,4 +37,16 @@ export const basicRoutes = [
       layout: 'empty',
     },
   },
+
+
+
+  {
+    name: 'ArticleDetail',
+    path: '/articles/:id',
+    component: () => import('@/views/articles/ArticleDetail.vue'),
+    props: true, // 这将把路由参数作为 props 传递给组件
+    meta: {
+      dynamicTitle: true // 标记需要动态更新标题
+    }
+  }
 ]
