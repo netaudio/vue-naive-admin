@@ -48,5 +48,11 @@ export const basicRoutes = [
     meta: {
       dynamicTitle: true // 标记需要动态更新标题
     }
+  },
+  {
+    name: 'ArticleEdit',
+    path: '/articles/:id/edit',
+    component: () => import('@/views/articles/ArticleEdit.vue'),
+    props: true
   }
 ]

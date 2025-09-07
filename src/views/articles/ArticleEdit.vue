@@ -1,11 +1,16 @@
 <template>
-  <div class="article-publish">
+  <div class="article-edit">
     <div class="header">
       <button class="back-btn" @click="goBack">←</button>
-      <h1>📝 发布文章</h1>
+      <h1>✏️ 编辑文章</h1>
     </div>
 
-    <div class="form-container">
+    <div v-if="loading" class="loading">
+      <div class="loading-spinner"></div>
+      <div>加载中...</div>
+    </div>
+
+    <div v-else-if="article" class="form-container">
       <form @submit.prevent="handleSubmit">
         <!-- 文章标题 -->
         <div class="form-group">
@@ -28,6 +33,7 @@
               v-for="category in categories"
               :key="category.category_id"
               :value="category.slug"
+              :selected="category.slug === article.category"
             >
               {{ category.name }}
             </option>
@@ -52,20 +58,28 @@
           </div>
         </div>
 
-        <!-- 修改封面图片部分为多图片上传 -->
+        <!-- 文章图片 -->
         <div class="form-group">
           <label class="form-label">文章图片</label>
           <div class="image-uploader">
             <div class="image-preview-container">
-              <div v-for="(image, index) in form.images" :key="index" class="image-preview-item">
-                <img :src="image.previewUrl" :alt="'图片预览 ' + (index + 1)" />
-                <button type="button" class="remove-image" @click="removeImage(index)">×</button>
+              <!-- 显示已存在的图片 -->
+              <div v-for="(imageUrl, index) in existingImages" :key="'existing-'+index" class="image-preview-item">
+                <img :src="imageUrl" :alt="'文章图片 ' + (index + 1)" />
+                <button type="button" class="remove-image" @click="removeExistingImage(index)">×</button>
+              </div>
+
+              <!-- 显示新上传的图片 -->
+              <div v-for="(image, index) in form.newImages" :key="image.url" class="image-preview-item">
+                <img :src="image.url || image.previewUrl" :alt="'文章图片 ' + (index + 1)" />
+                <button type="button" class="remove-image" @click="removeNewImage(index)">×</button>
                 <div class="image-progress" v-if="image.uploading">
                   <div class="progress-bar" :style="{ width: image.progress + '%' }"></div>
                 </div>
               </div>
+
               <div class="upload-placeholder" @click="triggerFileUpload">
-                <div class="upload-icon">📷</div>
+                <div class="upload-icon">📷📷</div>
                 <div class="upload-text">点击上传图片</div>
                 <input
                   ref="fileInput"
@@ -136,45 +150,65 @@
             取消
           </button>
           <button type="submit" class="btn-primary" :disabled="isSubmitting">
-            {{ isSubmitting ? '发布中...' : (saveAsDraft ? '保存草稿' : '发布文章') }}
+            {{ isSubmitting ? '保存中...' : '保存修改' }}
+          </button>
+          <button
+            type="button"
+            class="btn-danger"
+            @click="confirmDelete"
+            v-if="canDelete"
+          >
+            删除文章
           </button>
         </div>
       </form>
+    </div>
+
+    <div v-else class="error">
+      <div class="error-icon">😿😿</div>
+      <div class="error-text">文章不存在或无法编辑</div>
+      <button class="retry-btn" @click="goBack">返回列表</button>
     </div>
   </div>
 </template>
 
 <script>
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { useArticleStore } from '@/store'
-import { useMessage } from 'naive-ui'
+import { useRoute, useRouter } from 'vue-router'
+import { useArticleStore, useUserStore } from '@/store'
+import { useMessage, useDialog } from 'naive-ui'
 
 export default {
-  name: 'ArticlePublish',
+  name: 'ArticleEdit',
   setup() {
+    const route = useRoute()
     const router = useRouter()
     const articleStore = useArticleStore()
+    const userStore = useUserStore()
     const message = useMessage()
+    const dialog = useDialog()
 
+    const article = ref(null)
+    const loading = ref(false)
     const form = ref({
       title: '',
       category: '',
       tags: [],
-      images: [], // 修改为数组形式存储多张图片
-      cover: '',
-      coverFile: null, // 新增: 真正要上传的文件
+      images: [], // 原有图片URL
+      newImages: [], // 新上传的图片
       summary: '',
       content: '',
       is_featured: false
     })
 
+    const existingImages = ref([]) // 单独管理原有图片
     const saveAsDraft = ref(false)
     const isSubmitting = ref(false)
     const categories = ref([])
     const availableTags = ref([])
     const selectedTags = ref([])
     const fileInput = ref(null)
+    const canDelete = ref(false)
 
     // 计算阅读时长
     const readingTime = computed(() => {
@@ -184,17 +218,49 @@ export default {
       return Math.max(1, Math.ceil(totalWords / 300))
     })
 
-    // 获取分类和标签数据
+    // 加载文章数据和分类标签数据
     const loadData = async () => {
+      const articleId = route.params.id
+      if (!articleId) return
+
+      loading.value = true
       try {
-        const [categoriesRes, tagsRes] = await Promise.all([
+        // 并行加载文章数据和分类标签数据
+        const [articleData, categoriesRes, tagsRes] = await Promise.all([
+          articleStore.getArticle(articleId),
           articleStore.getCategories(),
           articleStore.getTags()
         ])
+
+        article.value = articleData
         categories.value = categoriesRes
         availableTags.value = tagsRes
+
+        // 初始化表单数据
+        form.value = {
+          title: articleData.title,
+          category: articleData.category,
+          tags: articleData.tags || [],
+          images: articleData.images || [],
+          summary: articleData.summary || '',
+          content: articleData.content,
+          is_featured: articleData.is_featured || false
+        }
+
+        // 初始化现有图片
+        existingImages.value = articleData.images || []
+
+        // 初始化选中的标签
+        selectedTags.value = articleData.tags || []
+
+        // 检查用户是否有删除权限
+        canDelete.value = userStore.userId === articleData.author_id
+
       } catch (error) {
+        console.error('加载数据失败:', error)
         message.error('加载数据失败')
+      } finally {
+        loading.value = false
       }
     }
 
@@ -213,48 +279,65 @@ export default {
       fileInput.value.click()
     }
 
-    // 处理文件上传 - 修改为支持多文件
+    // 处理文件上传
     const handleFileUpload = async (event) => {
-      const files = Array.from(event.target.files)
-      if (files.length === 0) {
-        console.log('未选择文件')
-        return
-      }
+      try {
+        const files = Array.from(event.target.files)
+        if (files.length === 0) return
 
-      // 检查文件大小和类型
-      const validFiles = files.filter(file => {
-        const isValidType = file.type.startsWith('image/')
-        const isValidSize = file.size <= 5 * 1024 * 1024 // 5MB
-        // console.log('文件类型:', file.type, '大小:', file.size)
-        return isValidType && isValidSize
-      })
-
-      if (validFiles.length !== files.length) {
-        message.warning('部分文件不符合要求(仅支持图片且小于5MB)')
-      }
-
-      // 为每个文件创建预览和上传任务
-      for (const file of validFiles) {
-        const imageItem = {
-          file,
-          previewUrl: URL.createObjectURL(file),
-          uploading: false,
-          progress: 0,
-          uploaded: false,
-          url: '' // 上传成功后存储服务器返回的URL
+        // 检查文件数量限制（例如最多5张）
+        if (files.length > 5) {
+          message.warning('最多只能上传5张图片')
+          return
         }
 
-        form.value.images.push(imageItem)
-        await uploadImage(imageItem) // 上传图片
+        // 检查文件大小和类型
+        const validFiles = files.filter(file => {
+          const isValidType = file.type.startsWith('image/')
+          const isValidSize = file.size <= 5 * 1024 * 1024 // 5MB
+          return isValidType && isValidSize
+        })
+
+        if (validFiles.length !== files.length) {
+          message.warning(`有${files.length - validFiles.length}张图片不符合要求(仅支持图片且小于5MB)`)
+        }
+
+        if (validFiles.length === 0) return
+
+        // 确保 newImages 数组已初始化
+        if (!form.value.newImages) {
+          form.value.newImages = []
+        }
+
+        // 为每个文件创建预览和上传任务
+        const uploadPromises = validFiles.map(file => {
+          const imageItem = {
+            file,
+            previewUrl: URL.createObjectURL(file),
+            uploading: false,
+            progress: 0,
+            uploaded: false,
+            url: ''
+          }
+
+          form.value.newImages.push(imageItem)
+          return uploadImage(imageItem)
+        })
+
+        await Promise.all(uploadPromises)
+
+      } catch (error) {
+        console.error('文件上传处理错误:', error)
+        message.error('文件上传处理出错')
+      } finally {
+        // 重置文件输入，允许重复选择相同文件
+        event.target.value = ''
       }
     }
 
     // 上传单张图片
     const uploadImage = async (imageItem) => {
       imageItem.uploading = true
-      const formData = new FormData()
-      formData.append('file', imageItem.file)
-      console.log('上传图片:', imageItem.file.name)
 
       try {
         const response = await articleStore.uploadImage(imageItem.file, (progressEvent) => {
@@ -264,34 +347,33 @@ export default {
           imageItem.progress = percentCompleted
         })
 
-        imageItem.url = response.url // 假设后端返回包含url字段
+        imageItem.url = response.url
         imageItem.uploaded = true
       } catch (error) {
         message.error('图片上传失败: ' + error.message)
-        // 可以选择移除上传失败的图片
-        const index = form.value.images.indexOf(imageItem)
+        // 移除上传失败的图片
+        const index = form.value.newImages.indexOf(imageItem)
         if (index > -1) {
-          form.value.images.splice(index, 1)
+          form.value.newImages.splice(index, 1)
         }
       } finally {
         imageItem.uploading = false
       }
     }
 
-    // 移除图片
-    const removeImage = (index) => {
-      const image = form.value.images[index]
+    // 移除新上传的图片
+    const removeNewImage = (index) => {
+      const image = form.value.newImages[index]
       // 释放预览URL内存
       if (image.previewUrl) {
         URL.revokeObjectURL(image.previewUrl)
       }
-      form.value.images.splice(index, 1)
+      form.value.newImages.splice(index, 1)
     }
 
-    // 移除封面
-    const removeCover = () => {
-      form.value.cover = ''
-      form.value.coverFile = null
+    // 移除原有图片
+    const removeExistingImage = (index) => {
+      existingImages.value.splice(index, 1)
     }
 
     // 提交表单
@@ -315,35 +397,42 @@ export default {
           ...form.value,
           tags: selectedTags.value.join(','),
           status: saveAsDraft.value ? 'draft' : 'published',
-          images: form.value.images.filter(img => img.uploaded).map(img => img.url).join(','),
+          // 合并原有图片和新上传的图片
+          images: [
+            ...(existingImages.value || []),
+            ...((form.value.newImages || [])
+              .filter(img => img.uploaded)
+              .map(img => img.url) || [])
+          ].filter(Boolean).join(',')
         }
-        // // 构建 FormData
-        // const formData = new FormData()
-        // formData.append('title', form.value.title)
-        // formData.append('category', form.value.category)
-        // formData.append('tags', selectedTags.value.join(','))
-        // formData.append('summary', form.value.summary)
-        // formData.append('content', form.value.content)
-        // formData.append('is_featured', form.value.is_featured ? true : false)
-        // formData.append('status', saveAsDraft.value ? 'draft' : 'published')
-
-        // // 添加已上传的图片URL
-        // const imageUrls = form.value.images
-        //   .filter(img => img.uploaded)
-        //   .map(img => img.url)
-        // formData.append('images', JSON.stringify(imageUrls))
-
-        // // if (form.value.coverFile) {
-        // //   formData.append('file', form.value.coverFile) // 👈 关键
-        // // }
-        await articleStore.createArticle(articleData)
-        message.success(saveAsDraft.value ? '草稿保存成功' : '文章发布成功')
-        goBack()
+        await articleStore.updateArticle(article.value.article_id, articleData)
+        message.success('文章更新成功')
+        router.push(`/articles/${article.value.article_id}`)
       } catch (error) {
-        message.error('发布失败，请重试')
+        message.error('更新失败，请重试')
+        console.log('更新失败，请重试: ', error)
       } finally {
         isSubmitting.value = false
       }
+    }
+
+    // 删除文章确认
+    const confirmDelete = () => {
+      dialog.warning({
+        title: '删除确认',
+        content: '确定要删除这篇文章吗？此操作不可恢复。',
+        positiveText: '确定',
+        negativeText: '取消',
+        onPositiveClick: async () => {
+          try {
+            await articleStore.deleteArticle(article.value.article_id)
+            message.success('文章已删除')
+            router.push('/articles')
+          } catch (error) {
+            message.error('删除失败: ' + error.message)
+          }
+        }
+      })
     }
 
     // 返回上一页
@@ -356,20 +445,25 @@ export default {
     })
 
     return {
+      article,
+      loading,
       form,
+      existingImages,
       saveAsDraft,
       isSubmitting,
       categories,
       availableTags,
       selectedTags,
       fileInput,
+      canDelete,
       readingTime,
       toggleTag,
       triggerFileUpload,
       handleFileUpload,
-      removeCover,
+      removeNewImage,
+      removeExistingImage,
       handleSubmit,
-      removeImage,
+      confirmDelete,
       goBack
     }
   }
@@ -377,7 +471,7 @@ export default {
 </script>
 
 <style scoped>
-.article-publish {
+.article-edit {
   max-width: 800px;
   margin: 0 auto;
   background: white;
@@ -407,6 +501,63 @@ export default {
   color: white;
   font-size: 18px;
   cursor: pointer;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #999;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #ff6b6b;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #999;
+}
+
+.error-icon {
+  font-size: 48px;
+  margin-bottom: 20px;
+}
+
+.error-text {
+  font-size: 16px;
+  margin-bottom: 20px;
+}
+
+.retry-btn {
+  padding: 12px 24px;
+  background: #ff6b6b;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.retry-btn:hover {
+  background: #ff5252;
 }
 
 .form-container {
@@ -474,10 +625,6 @@ export default {
 .tag-chip.active {
   background: #fff5f5;
   border-color: currentColor;
-}
-
-.cover-upload {
-  margin-top: 8px;
 }
 
 /* 图片上传器样式 */
@@ -573,37 +720,6 @@ export default {
   margin-top: 5px;
 }
 
-.cover-preview {
-  position: relative;
-  width: 100%;
-  height: 200px;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.cover-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.remove-cover {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.6);
-  color: white;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-}
-
 .editor-container {
   position: relative;
 }
@@ -642,13 +758,14 @@ export default {
 
 .form-buttons {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 15px;
   margin-top: 30px;
 }
 
 .btn-primary,
-.btn-secondary {
+.btn-secondary,
+.btn-danger {
   padding: 15px;
   border-radius: 8px;
   font-size: 16px;
@@ -680,6 +797,15 @@ export default {
 
 .btn-secondary:hover {
   background: #e0e0e0;
+}
+
+.btn-danger {
+  background: #ffebee;
+  color: #f44336;
+}
+
+.btn-danger:hover {
+  background: #ffcdd2;
 }
 
 @media (max-width: 768px) {

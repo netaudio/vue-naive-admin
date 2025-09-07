@@ -36,8 +36,8 @@
       </div>
 
       <!-- 封面图片 -->
-      <div v-if="article.cover" class="article-cover">
-        <img :src="getCoverUrl(article.cover)" :alt="article.title" />
+      <div v-for="(imgurl, index) in article.images" :key="index" class="article-image">
+        <img :src="imgurl" :alt="'文章图片 ' + (index + 1)" />
       </div>
 
       <!-- 文章摘要 -->
@@ -72,6 +72,14 @@
           <span class="btn-icon">📤</span>
           <span class="btn-text">分享</span>
         </button>
+        <button
+          v-if="canEdit"
+          class="action-btn edit-btn"
+          @click="editArticle(article.article_id)"
+        >
+          <span class="btn-icon">✏️</span>
+          <span class="btn-text">编辑</span>
+        </button>
       </div>
 
       <!-- 相关文章推荐 -->
@@ -84,8 +92,8 @@
             class="related-item"
             @click="goToArticle(relatedArticle.article_id)"
           >
-            <div v-if="relatedArticle.cover" class="related-cover">
-              <img :src="getCoverUrl(relatedArticle.cover)" :alt="relatedArticle.title" />
+            <div v-if="relatedArticle.images" class="related-cover">
+              <img :src="getCoverUrl(relatedArticle.images)" :alt="relatedArticle.title" />
             </div>
             <div class="related-content">
               <h4 class="related-title">{{ relatedArticle.title }}</h4>
@@ -110,8 +118,8 @@
 <script>
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useArticleStore } from '@/store'
-import { ElMessage } from 'element-plus'
+import { useArticleStore, useUserStore } from '@/store'
+import { useMessage } from 'naive-ui'
 
 export default {
   name: 'ArticleDetail',
@@ -119,6 +127,8 @@ export default {
     const route = useRoute()
     const router = useRouter()
     const articleStore = useArticleStore()
+    const userStore = useUserStore()
+    const message = useMessage()
 
     const article = ref(null)
     const relatedArticles = ref([])
@@ -139,7 +149,7 @@ export default {
         await loadRelatedArticles(articleData.category)
       } catch (error) {
         console.error('加载文章失败:', error)
-        ElMessage.error('加载文章失败')
+        message.error('加载文章失败')
       } finally {
         loading.value = false
       }
@@ -167,9 +177,9 @@ export default {
         const result = await articleStore.likeArticle(article.value.article_id)
         article.value.likes = result.likes
         article.value.isLiked = result.liked
-        ElMessage.success(result.liked ? '点赞成功' : '取消点赞')
+        message.success(result.liked ? '点赞成功' : '取消点赞')
       } catch (error) {
-        ElMessage.error('操作失败')
+        message.error('操作失败')
       }
     }
 
@@ -180,9 +190,9 @@ export default {
       try {
         const result = await articleStore.favoriteArticle(article.value.article_id)
         article.value.isFavorited = result.favorited
-        ElMessage.success(result.favorited ? '收藏成功' : '取消收藏')
+        message.success(result.favorited ? '收藏成功' : '取消收藏')
       } catch (error) {
-        ElMessage.error('操作失败')
+        message.error('操作失败')
       }
     }
 
@@ -197,9 +207,9 @@ export default {
       } else {
         // 复制链接到剪贴板
         navigator.clipboard.writeText(window.location.href).then(() => {
-          ElMessage.success('链接已复制到剪贴板')
+          message.success('链接已复制到剪贴板')
         }).catch(() => {
-          ElMessage.error('复制失败')
+          message.error('复制失败')
         })
       }
     }
@@ -232,11 +242,22 @@ export default {
 
     const getCoverUrl = (filename) => {
       if (!filename) return ''
-      return `${import.meta.env.VITE_AXIOS_UPLOADS_URL}/${filename}`
+      return `${filename.length > 0 ? filename[0] : ''}`
+      // return `${import.meta.env.VITE_AXIOS_UPLOADS_URL}/${filename}`
     }
 
     const setDocumentTitle = (title) => {
       document.title = title || '文章详情'
+    }
+
+    const canEdit = computed(() => {
+      if (!article.value || !userStore) return false
+      return userStore.userId == article.value.author_id
+    })
+
+    // 编辑文章
+    const editArticle = (articleId) => {
+      router.push(`/articles/${articleId}/edit`)
     }
 
     onMounted(() => {
@@ -255,6 +276,8 @@ export default {
       formatDate,
       getCoverUrl,
       setDocumentTitle,
+      canEdit,
+      editArticle,
       formatContent
     }
   }

@@ -112,6 +112,20 @@ export const useArticleStore = defineStore('article', () => {
     }
   }
 
+  const uploadImage = async (file, onUploadProgress) => {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await api.post('/articles/upload-image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      },
+      onUploadProgress
+    })
+
+    return response.data
+  }
+
   return {
     articles,
     categories,
@@ -125,6 +139,7 @@ export const useArticleStore = defineStore('article', () => {
     likeArticle,
     favoriteArticle,
     getCategories,
-    getTags
+    getTags,
+    uploadImage
   }
 })

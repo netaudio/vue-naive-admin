@@ -68,8 +68,8 @@
           class="article-card"
           @click="goToDetail(article.article_id)"
         >
-          <div v-if="article.cover" class="article-cover">
-            <img :src="getCoverUrl(article.cover)" :alt="article.title" />
+          <div v-if="article.images" class="article-cover">
+            <img :src="getCoverUrl(article.images)" :alt="article.title" />
           </div>
           <div class="article-content">
             <h3 class="article-title">{{ article.title }}</h3>
@@ -105,6 +105,13 @@
                 >
                   ⭐
                 </button>
+                <button
+                  v-if="canEditArticle(article)"
+                  class="action-btn edit-btn"
+                  @click.stop="editArticle(article.article_id)"
+                >
+                  ✏️
+                </button>
               </div>
             </div>
           </div>
@@ -138,15 +145,16 @@
 <script>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useArticleStore } from '@/store'
-import { ElMessage } from 'element-plus'
+import { useArticleStore, useUserStore } from '@/store'
+import { useMessage } from 'naive-ui'
 
 export default {
   name: 'ArticleList',
   setup() {
     const router = useRouter()
     const articleStore = useArticleStore()
-
+    const userStore = useUserStore()
+    const message = useMessage()
     const articles = ref([])
     const categories = ref([])
     const tags = ref([])
@@ -176,7 +184,7 @@ export default {
         articles.value = result.list
         total.value = result.total
       } catch (error) {
-        ElMessage.error('加载文章失败')
+        message.error('加载文章失败')
       } finally {
         loading.value = false
       }
@@ -192,7 +200,7 @@ export default {
         categories.value = categoriesRes
         tags.value = tagsRes
       } catch (error) {
-        ElMessage.error('加载数据失败')
+        message.error('加载数据失败')
       }
     }
 
@@ -227,9 +235,9 @@ export default {
         const result = await articleStore.likeArticle(article.article_id)
         article.likes = result.likes
         article.isLiked = result.liked
-        ElMessage.success(result.liked ? '点赞成功' : '取消点赞')
+        message.success(result.liked ? '点赞成功' : '取消点赞')
       } catch (error) {
-        ElMessage.error('操作失败')
+        message.error('操作失败')
       }
     }
 
@@ -238,15 +246,16 @@ export default {
       try {
         const result = await articleStore.favoriteArticle(article.article_id)
         article.isFavorited = result.favorited
-        ElMessage.success(result.favorited ? '收藏成功' : '取消收藏')
+        message.success(result.favorited ? '收藏成功' : '取消收藏')
       } catch (error) {
-        ElMessage.error('操作失败')
+        message.error('操作失败')
       }
     }
 
   const getCoverUrl = (filename) => {
     if (!filename) return ''
-    return `${import.meta.env.VITE_AXIOS_UPLOADS_URL}/${filename}`
+    return `${filename.length > 0 ? filename[0] : ''}`
+    // return `${import.meta.env.VITE_AXIOS_UPLOADS_URL}/${filename}`
   }
 
     // 跳转到文章详情
@@ -275,6 +284,16 @@ export default {
       } else {
         return date.toLocaleDateString()
       }
+    }
+
+    const canEditArticle = (article) => {
+      if (!userStore) return false
+      return userStore.userId == article.author_id
+    }
+
+    // 编辑文章
+    const editArticle = (articleId) => {
+      router.push(`/articles/${articleId}/edit`)
     }
 
     // 监听筛选条件变化
@@ -306,6 +325,8 @@ export default {
       toggleFavorite,
       goToDetail,
       goToPublish,
+      canEditArticle,
+      editArticle,
       formatDate
     }
   }

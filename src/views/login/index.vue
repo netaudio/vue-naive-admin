@@ -131,7 +131,7 @@ initCaptcha()
 function quickLogin() {
   loginInfo.value.username = 'admin'
   loginInfo.value.password = '123456'
-  loginInfo.value.captcha = 'ABCD',
+  loginInfo.value.captcha = 'ABCD'
 
   handleLogin(true)
 }

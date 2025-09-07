@@ -11,7 +11,7 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import { setupDirectives } from './directives'
-
+import naive from 'naive-ui'
 import { setupRouter } from './router'
 import { setupStore } from './store'
 import { setupNaiveDiscreteApi } from './utils'
@@ -24,6 +24,7 @@ async function bootstrap() {
   setupStore(app)
   setupDirectives(app)
   await setupRouter(app)
+  app.use(naive)
   app.mount('#app')
   setupNaiveDiscreteApi()
 }
