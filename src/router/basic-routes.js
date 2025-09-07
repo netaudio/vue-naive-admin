@@ -53,6 +53,9 @@ export const basicRoutes = [
     name: 'ArticleEdit',
     path: '/articles/:id/edit',
     component: () => import('@/views/articles/ArticleEdit.vue'),
-    props: true
+    props: true,
+    meta: {
+      title: '更新文章'
+    },
   }
 ]

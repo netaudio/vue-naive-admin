@@ -65,13 +65,13 @@
             <div class="image-preview-container">
               <!-- 显示已存在的图片 -->
               <div v-for="(imageUrl, index) in existingImages" :key="'existing-'+index" class="image-preview-item">
-                <img :src="imageUrl" :alt="'文章图片 ' + (index + 1)" />
+                <img :src="getCoverUrl(imageUrl)" :alt="'文章图片 ' + (index + 1)" />
                 <button type="button" class="remove-image" @click="removeExistingImage(index)">×</button>
               </div>
 
               <!-- 显示新上传的图片 -->
               <div v-for="(image, index) in form.newImages" :key="image.url" class="image-preview-item">
-                <img :src="image.url || image.previewUrl" :alt="'文章图片 ' + (index + 1)" />
+                <img :src="(image.url ? getCoverUrl(image.url) : image.previewUrl)" :alt="'文章图片 ' + (index + 1)" />
                 <button type="button" class="remove-image" @click="removeNewImage(index)">×</button>
                 <div class="image-progress" v-if="image.uploading">
                   <div class="progress-bar" :style="{ width: image.progress + '%' }"></div>
@@ -440,6 +440,11 @@ export default {
       router.back()
     }
 
+    const getCoverUrl = (filename) => {
+      if (!filename) return ''
+      return `${import.meta.env.VITE_AXIOS_UPLOADS_URL}/${filename}`
+    }
+
     onMounted(() => {
       loadData()
     })
@@ -464,7 +469,8 @@ export default {
       removeExistingImage,
       handleSubmit,
       confirmDelete,
-      goBack
+      goBack,
+      getCoverUrl
     }
   }
 }

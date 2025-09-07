@@ -37,7 +37,7 @@
 
       <!-- 封面图片 -->
       <div v-for="(imgurl, index) in article.images" :key="index" class="article-image">
-        <img :src="imgurl" :alt="'文章图片 ' + (index + 1)" />
+        <img :src="getCoverUrl(imgurl)" :alt="'文章图片 ' + (index + 1)" />
       </div>
 
       <!-- 文章摘要 -->
@@ -242,8 +242,7 @@ export default {
 
     const getCoverUrl = (filename) => {
       if (!filename) return ''
-      return `${filename.length > 0 ? filename[0] : ''}`
-      // return `${import.meta.env.VITE_AXIOS_UPLOADS_URL}/${filename}`
+      return `${import.meta.env.VITE_AXIOS_UPLOADS_URL}/${filename}`
     }
 
     const setDocumentTitle = (title) => {

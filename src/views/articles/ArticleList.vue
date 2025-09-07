@@ -252,11 +252,10 @@ export default {
       }
     }
 
-  const getCoverUrl = (filename) => {
-    if (!filename) return ''
-    return `${filename.length > 0 ? filename[0] : ''}`
-    // return `${import.meta.env.VITE_AXIOS_UPLOADS_URL}/${filename}`
-  }
+    const getCoverUrl = (filename) => {
+      if (!filename) return ''
+      return `${filename.length > 0 ? `${import.meta.env.VITE_AXIOS_UPLOADS_URL}/${filename[0]}` : ''}`
+    }
 
     // 跳转到文章详情
     const goToDetail = (articleId) => {
